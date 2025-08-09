@@ -471,9 +471,7 @@ const Dashboard = () => {
                                           <th className="text-left px-2">
                                             Mount
                                           </th>
-                                          <th className="text-left px-2">
-                                            Type
-                                          </th>
+
                                           <th className="text-left px-2">
                                             Total
                                           </th>
@@ -495,9 +493,7 @@ const Dashboard = () => {
                                               <td className="px-2 py-1">
                                                 {disk.mountpoint}
                                               </td>
-                                              <td className="px-2 py-1">
-                                                {disk.type}
-                                              </td>
+
                                               <td className="px-2 py-1">
                                                 {formatBytes(disk.total)}
                                               </td>
