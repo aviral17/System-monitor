@@ -5,10 +5,20 @@ import csv
 import io
 import json
 import time
+import subprocess
+import os
 
 app = Flask(__name__)
 CORS(app)
 init_db()
+
+# Auto-generate SSL certs if missing
+if not os.path.exists("cert.pem") or not os.path.exists("key.pem"):
+    subprocess.run([
+        "openssl", "req", "-x509", "-newkey", "rsa:4096", "-nodes",
+        "-keyout", "key.pem", "-out", "cert.pem", "-days", "365",
+        "-subj", "/CN=localhost"
+    ], check=True)
 
 @app.route('/')
 def home():
@@ -73,6 +83,10 @@ def home():
 #     finally:
 #         session.close()
 
+
+@app.route('/cert.pem')
+def get_cert():
+    return send_file('cert.pem', mimetype='application/x-pem-file')
 
 @app.route('/api/report', methods=['POST'])
 def report_data():
@@ -269,11 +283,18 @@ def export_csv():
         cw.writerow([
             'machine_id', 'hostname', 'os_platform', 'os_version', 'username',
             'cpu_cores', 'memory_mb', 'timestamp', 'disk_encryption', 'os_updates',
-            'antivirus', 'sleep_settings', 'cpu_usage', 'memory_usage', 'disk_usage', 'disk_info'
+            'antivirus', 'sleep_settings', 'cpu_usage (%)', 'memory_usage (%)', 'disk_usage (%)', 'disk_info'
         ])
         reports = session.query(Report).order_by(Report.timestamp.desc()).all()
         for report in reports:
             machine = session.query(Machine).get(report.machine_id)
+            
+            # Convert booleans to human-readable statuses
+            disk_encryption = "Encrypted" if report.disk_encryption else "Unencrypted"
+            os_updates = "Update Available" if report.os_updates else "Updated"
+            antivirus = "Active" if report.antivirus else "Inactive"
+            sleep_settings = "<=10 min" if report.sleep_settings else ">10 min"
+            
             cw.writerow([
                 machine.uuid if machine else "",
                 machine.hostname if machine else "",
@@ -283,13 +304,13 @@ def export_csv():
                 machine.cpu_cores if machine else "",
                 machine.memory_mb if machine else "",
                 report.timestamp,
-                report.disk_encryption,
-                report.os_updates,
-                report.antivirus,
-                report.sleep_settings,
-                report.cpu_usage,
-                report.memory_usage,
-                report.disk_usage,
+                disk_encryption,
+                os_updates,
+                antivirus,
+                sleep_settings,
+                f"{report.cpu_usage:.2f} %",
+                f"{report.memory_usage:.2f} %",
+                f"{report.disk_usage:.2f} %",
                 report.disk_info or ""
             ])
         output = io.BytesIO()
@@ -307,4 +328,5 @@ def export_csv():
         session.close()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # app.run(host='0.0.0.0', port=5000, debug=True, ssl_context=('cert.pem', 'key.pem')) # ssl_context ---> HTTPS secured HTTP server
+    app.run(host='192.168.0.105', port=5000, debug=True, ssl_context=('cert.pem', 'key.pem')) # ssl_context ---> HTTPS secured HTTP server

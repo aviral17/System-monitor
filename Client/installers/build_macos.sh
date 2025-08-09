@@ -1,7 +1,4 @@
-#!/bin/zsh
-pip install pyinstaller
-pip install -r requirements.txt
-pyinstaller --onefile --add-data "requirements.txt:." --hidden-import=psutil system_utility.py
-mv dist/system_utility .
-rm -rf build dist
-echo "Build complete! Executable: system_utility"
+#!/bin/bash
+pyinstaller --onefile --add-data="cert.pem:." --hidden-import=requests --hidden-import=psutil --hidden-import=uuid system_utility.py
+hdiutil create -fs HFS+ -srcfolder dist/system_utility -volname "SystemMonitor" system-monitor.dmg
+rm -rf build dist system_utility.spec

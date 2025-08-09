@@ -82,19 +82,19 @@ const Dashboard = () => {
   const getStatusBadge = (status, goodText, badText, isWarning = false) => {
     if (status) {
       return (
-        <Badge className="bg-green-600 text-white">
+        <Badge className="bg-green-600 text-white hover:bg-green-700 cursor-pointer">
           <CheckCircle2 className="h-4 w-4 mr-1" /> {goodText}
         </Badge>
       );
     } else if (isWarning) {
       return (
-        <Badge className="bg-yellow-500 text-gray-900">
+        <Badge className="bg-yellow-500 text-gray-900 hover:bg-yellow-600 cursor-pointer">
           <AlertCircle className="h-4 w-4 mr-1" /> {badText}
         </Badge>
       );
     } else {
       return (
-        <Badge className="bg-red-600 text-white">
+        <Badge className="bg-red-600 text-white hover:bg-red-700 cursor-pointer">
           <AlertCircle className="h-4 w-4 mr-1" /> {badText}
         </Badge>
       );
