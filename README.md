@@ -129,3 +129,14 @@ macOS: /var/log/systemmonitor.out.log
 sudo chown -R $USER:$USER client/installers/dist/
 sudo chmod -R 755 client/installers/dist/
 rm -rf client/installers/dist/
+
+
+
+
+
+
+
+
+
+
+
