@@ -1,34 +1,71 @@
-pyinstaller --onefile --add-data "cert.pem;." --hidden-import=requests --hidden-import=psutil --hidden-import=uuid system_utility.py
-$serviceScript = @"
-import win32serviceutil
-import win32service
-import win32event
-import servicemanager
-import sys
-import subprocess
+$APP_NAME = "SystemMonitor"
+$VERSION = "1.0.0"
+$OUTPUT_DIR = "dist"
+$INSTALL_DIR = $APP_NAME
 
-class SystemMonitorService(win32serviceutil.ServiceFramework):
-    _svc_name_ = 'SystemMonitor'
-    _svc_display_name_ = 'System Health Monitor'
+Remove-Item -Path $OUTPUT_DIR -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $OUTPUT_DIR | Out-Null
+$installPath = Join-Path -Path $OUTPUT_DIR -ChildPath $INSTALL_DIR
+New-Item -ItemType Directory -Path $installPath | Out-Null
 
-    def __init__(self, args):
-        win32serviceutil.ServiceFramework.__init__(self, args)
-        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+Copy-Item "..\system_utility.py" -Destination $installPath
 
-    def SvcStop(self):
-        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-        win32event.SetEvent(self.hWaitStop)
+$installScript = @'
+@echo off
+setlocal
 
-    def SvcDoRun(self):
-        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
-                              servicemanager.PYS_SERVICE_STARTED,
-                              (self._svc_name_, ''))
-        self.main()
+fltmc >nul 2>&1 || (
+    powershell -Command "Start-Process cmd -ArgumentList '/c','""%~f0""' -Verb RunAs"
+    exit /b
+)
 
-    def main(self):
-        subprocess.call(['dist\\system_utility.exe'])
-"@
-Set-Content -Path "service.py" -Value $serviceScript
-pyinstaller --onefile service.py
-Move-Item -Path dist\service.exe -Destination dist\system-monitor-service.exe
-Remove-Item service.py
+cd /d "%~dp0"
+
+where python >nul || (
+    echo Python not found. Install Python 3.10+ from python.org
+    pause
+    exit /b 1
+)
+
+for /f "delims=" %%P in ('where python') do set "PYTHON_EXE=%%P"
+
+sc query SystemMonitorService >nul 2>&1 && (
+    sc stop SystemMonitorService
+    timeout /t 3 >nul
+    sc delete SystemMonitorService
+    timeout /t 2 >nul
+)
+
+sc create SystemMonitorService binPath= "cmd /c start /b \"\" \"%PYTHON_EXE%\" \"%~dp0system_utility.py\" --service" start= auto
+
+sc start SystemMonitorService
+
+echo Service installed! Check services.msc to verify status
+pause
+'@
+
+Set-Content -Path (Join-Path -Path $installPath -ChildPath "install.bat") -Value $installScript
+
+$uninstallScript = @'
+@echo off
+setlocal
+
+fltmc >nul 2>&1 || (
+    powershell -Command "Start-Process cmd -ArgumentList '/c','""%~f0""' -Verb RunAs"
+    exit /b
+)
+
+sc stop SystemMonitorService
+timeout /t 3 >nul
+sc delete SystemMonitorService
+
+rmdir /s /q "%ProgramData%\SystemMonitor" >nul 2>&1
+
+echo Service completely removed!
+pause
+'@
+
+Set-Content -Path (Join-Path -Path $installPath -ChildPath "uninstall.bat") -Value $uninstallScript
+
+Compress-Archive -Path "$installPath\*" -DestinationPath "$OUTPUT_DIR\$APP_NAME-$VERSION.zip" -Force
+Write-Host "Installer created: $OUTPUT_DIR\$APP_NAME-$VERSION.zip"

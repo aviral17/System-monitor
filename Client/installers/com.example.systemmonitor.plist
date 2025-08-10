@@ -3,14 +3,20 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.company.systemmonitor</string>
+    <string>com.example.systemmonitor</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/system_utility</string>
+        <string>/usr/local/bin/system-monitor-client</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/system_monitor.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/system_monitor.log</string>
+    <key>StartInterval</key>
+    <integer>900</integer>
 </dict>
 </plist>

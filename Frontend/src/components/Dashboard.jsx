@@ -75,8 +75,41 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const r = await fetch("https://192.168.0.105:5000/api/machines");
+        if (!mounted) return;
+        const json = await r.json();
+        setMachines(json);
+      } catch {}
+    }
+    load();
+    const id = setInterval(load, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, []);
+
   const handleExport = () => {
     window.open("/api/export", "_blank");
+  };
+
+  const handleKill = async (machine_id) => {
+    const pid = window.prompt(
+      `Enter PID to kill on ${machine_id.substring(0, 8)}:`
+    );
+    if (!pid) return;
+    if (!window.confirm(`Kill PID ${pid} on ${machine_id.substring(0, 8)}?`))
+      return;
+    try {
+      await axios.post("/api/commands/kill", { machine_id, pid });
+      alert("Kill command sent");
+    } catch (err) {
+      alert("Failed to send kill command");
+    }
   };
 
   const getStatusBadge = (status, goodText, badText, isWarning = false) => {
@@ -359,6 +392,7 @@ const Dashboard = () => {
                       <TableHead>
                         <Moon className="h-4 w-4 mr-1 inline" /> Sleep
                       </TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -416,27 +450,27 @@ const Dashboard = () => {
                             : "Never"}
                         </TableCell>
                         <TableCell>
-                          {renderUsageBar(
+                          {/* {renderUsageBar(
                             machine.cpu_usage || 0,
                             machine.cpu_usage > 80
                               ? "bg-red-500"
                               : machine.cpu_usage > 60
                               ? "bg-yellow-500"
                               : "bg-green-500"
-                          )}
+                          )}  */}
                           <div className="text-xs text-muted-foreground">
                             {machine.cpu_cores || 0} cores
                           </div>
                         </TableCell>
                         <TableCell>
-                          {renderUsageBar(
+                          {/* {renderUsageBar(
                             machine.memory_usage || 0,
                             machine.memory_usage > 80
                               ? "bg-red-500"
                               : machine.memory_usage > 60
                               ? "bg-yellow-500"
                               : "bg-green-500"
-                          )}
+                          )} */}
                           <div className="text-xs text-muted-foreground">
                             {machine.memory_mb
                               ? `${Math.round(machine.memory_mb / 1024)} GB`
@@ -539,6 +573,15 @@ const Dashboard = () => {
                             "≤10 min",
                             ">10 min"
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleKill(machine.machine_id)}
+                          >
+                            Kill
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

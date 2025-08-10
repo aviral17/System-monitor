@@ -10,46 +10,188 @@ import getpass
 import re
 import tempfile
 from pathlib import Path
+import sys
+import re
+from threading import Thread
 
 # API_URL = "https://192.168.1.100:5000/api/report"
 API_URL = "https://192.168.0.105:5000/api/report"
 # API_URL = "https://127.0.0.1:5000/api/report"
 
 
+def _fetch_cert_async(cert_url, cert_path):
+    try:
+        r = requests.get(cert_url, verify=False, timeout=1)
+        if r.status_code == 200 and r.text:
+            cert_path.write_text(r.text)
+    except:
+        pass
+
 def get_ssl_cert():
     cert_folder = Path(tempfile.gettempdir()) / "ssl_certificates"
     cert_folder.mkdir(exist_ok=True)
     cert_path = cert_folder / "backend-cert.pem"
-    
-    if not cert_path.exists():
+    if cert_path.exists():
+        return str(cert_path)
+    try:
         cert_url = API_URL.replace("/api/report", "/cert.pem")
-        try:
-            cert = requests.get(cert_url, verify=False, timeout=5).text
-            cert_path.write_text(cert)
-        except:
-            return False
-    return str(cert_path)
+        Thread(target=_fetch_cert_async, args=(cert_url, cert_path), daemon=True).start()
+    except:
+        pass
+    return False
+
 
 
 def get_machine_id():
-    id_path = os.path.expanduser("~/.system_monitor_id")
-    if os.path.exists(id_path):
-        with open(id_path, "r") as f:
-            return f.read().strip()
-    new_id = str(uuid.uuid4())
-    with open(id_path, "w") as f:
-        f.write(new_id)
+    id_path = Path(os.getenv('ProgramData', 'C:\\ProgramData')) / 'SystemMonitor' / 'machine_id'
+    id_path.parent.mkdir(parents=True, exist_ok=True)
+    if id_path.exists():
+        try:
+            existing = id_path.read_text().strip()
+            if existing:
+                return existing
+        except:
+            pass
+    new_id = None
+    if platform.system() == "Windows":
+        try:
+            import winreg
+            for view in (winreg.KEY_READ | getattr(winreg, 'KEY_WOW64_64KEY', 0), winreg.KEY_READ | getattr(winreg, 'KEY_WOW64_32KEY', 0)):
+                try:
+                    k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0, view)
+                    val, _ = winreg.QueryValueEx(k, "MachineGuid")
+                    if val and isinstance(val, str) and val.strip():
+                        new_id = val.strip()
+                        winreg.CloseKey(k)
+                        break
+                except:
+                    pass
+        except:
+            new_id = None
+        if not new_id:
+            try:
+                res = subprocess.run(['wmic', 'csproduct', 'get', 'uuid'], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
+                out = res.stdout or ""
+                import re as _re
+                m = _re.search(r'([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})', out)
+                if m:
+                    new_id = m.group(1).lower()
+            except:
+                new_id = None
+    if not new_id:
+        try:
+            new_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, platform.node() + str(uuid.getnode())))
+        except:
+            new_id = str(uuid.uuid4())
+    try:
+        id_path.write_text(new_id)
+    except:
+        pass
     return new_id
 
+
+
 def get_system_info():
+    username = None
+    try:
+        username = getpass.getuser()
+    except:
+        username = None
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(['query', 'user'], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=3)
+            out = result.stdout or ""
+            for line in out.splitlines():
+                parts = line.split()
+                if not parts:
+                    continue
+                candidate = parts[0]
+                candidate = re.sub(r'^[>\*\s]+', '', candidate).strip()
+                if not candidate:
+                    continue
+                if 'Active' in line or '>' in line or ('console' in line.lower()):
+                    username = candidate
+                    break
+            if not username:
+                for line in out.splitlines():
+                    parts = line.split()
+                    if not parts:
+                        continue
+                    candidate = re.sub(r'^[>\*\s]+', '', parts[0]).strip()
+                    if candidate and not candidate.lower().startswith('rdp-tcp') and not candidate.endswith('$'):
+                        username = candidate
+                        break
+        except:
+            pass
+    if username:
+        env_user = os.environ.get('USERNAME') or os.environ.get('USER')
+        if env_user:
+            if username.lower() == env_user.lower():
+                username = env_user
+            elif username.islower() and env_user.lower().startswith(username.lower()):
+                username = env_user
+            else:
+                username = username.strip()
+                if username.islower():
+                    username = username.capitalize()
+    if not username:
+        username = os.environ.get('USERNAME') or os.environ.get('USER') or platform.node()
     return {
         "hostname": platform.node(),
         "os_platform": platform.system(),
         "os_version": platform.release(),
-        "username": getpass.getuser(),
+        "username": username,
         "cpu_cores": psutil.cpu_count(logical=False),
         "memory_mb": int(psutil.virtual_memory().total / (1024 * 1024))
     }
+
+
+def execute_command_locally(cmd, machine_id):
+    ok = False
+    out = ""
+    try:
+        if cmd.get("action") == "kill":
+            pid = str(cmd.get("args", {}).get("pid", ""))
+            if not pid:
+                raise Exception("no pid")
+            if platform.system() == "Windows":
+                try:
+                    res = subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=8)
+                    ok = res.returncode == 0
+                    out = (res.stdout or "") + (res.stderr or "")
+                except Exception as e:
+                    ok = False
+                    out = str(e)
+            else:
+                try:
+                    res = subprocess.run(["kill", "-9", pid], capture_output=True, text=True, timeout=8)
+                    ok = res.returncode == 0
+                    out = (res.stdout or "") + (res.stderr or "")
+                except Exception as e:
+                    ok = False
+                    out = str(e)
+    except Exception as e:
+        ok = False
+        out = str(e)
+    try:
+        requests.post(API_URL.replace("/api/report", "/api/commands") + f"/{cmd.get('id')}/result", json={"machine_id": machine_id, "success": ok, "output": out}, timeout=5, verify=False)
+    except:
+        pass
+
+def poll_commands_loop(machine_id):
+    while True:
+        try:
+            r = requests.get(API_URL.replace("/api/report", "/api/commands") + f"/{machine_id}", timeout=5, verify=False)
+            if r.status_code == 200:
+                for c in r.json():
+                    try:
+                        execute_command_locally(c, machine_id)
+                    except:
+                        pass
+        except:
+            pass
+        time.sleep(10)
+
 
 def human_readable_size(num, decimals=2):
     if num is None:
@@ -451,11 +593,31 @@ def check_sleep_settings():
     return False
 
 def get_system_metrics():
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    mem = psutil.virtual_memory()
+    partitions = []
+    total_all = 0
+    used_all = 0
+    for p in psutil.disk_partitions(all=False):
+        try:
+            du = psutil.disk_usage(p.mountpoint)
+        except Exception:
+            continue
+        partitions.append({"mount": p.mountpoint, "total": du.total, "used": du.used, "free": du.free, "percent": du.percent})
+        total_all += du.total
+        used_all += du.used
+    overall_percent = 0.0
+    if total_all > 0:
+        overall_percent = round((used_all / total_all) * 100, 1)
+    disk_for_system = psutil.disk_usage("C:\\") if platform.system() == "Windows" else psutil.disk_usage("/")
     return {
-        "cpu_usage": psutil.cpu_percent(interval=1),
-        "memory_usage": psutil.virtual_memory().percent,
-        "disk_usage": psutil.disk_usage('/').percent
+        "cpu_usage": cpu_usage,
+        "memory_usage": mem.percent,
+        "disk_usage": overall_percent,
+        "disks": partitions,
+        "system_disk_percent": disk_for_system.percent
     }
+
 
 def get_system_state():
     return {
@@ -544,51 +706,48 @@ def get_system_state():
 def main():
     machine_id = get_machine_id()
     system_info = get_system_info()
+    Thread(target=poll_commands_loop, args=(machine_id,), daemon=True).start()
     last_state = None
     last_metrics = None
     last_disks = None
-    
     while True:
         try:
             current_state = get_system_state()
             current_metrics = get_system_metrics()
             current_disks = collect_disks()
-            
-            if (current_state != last_state or 
-                current_metrics != last_metrics or 
-                json.dumps(current_disks) != json.dumps(last_disks)):
-                
+            if (current_state != last_state or current_metrics != last_metrics or json.dumps(current_disks) != json.dumps(last_disks)):
                 payload = {
                     "machine_id": machine_id,
                     "timestamp": int(time.time()),
                     "system_info": system_info,
                     "state": current_state,
-                    "metrics": { **current_metrics, "disks": current_disks },
+                    "metrics": {**current_metrics, "disks": current_disks},
                     "raw": json.dumps({"state": current_state, "metrics": current_metrics, "disks": current_disks})
                 }
-                
                 try:
                     cert_path = get_ssl_cert()
                     verify = cert_path if cert_path else False
                     session = requests.Session()
                     session.verify = verify
-                    response = session.post(API_URL, json=payload, timeout=10)
+                    response = session.post(API_URL, json=payload, timeout=5)
                     if response.status_code != 200:
-                        print("Server responded:", response.status_code, response.text)
+                        pass
                 except requests.exceptions.SSLError:
-                    response = requests.post(API_URL, json=payload, timeout=10, verify=False)
-                    if response.status_code != 200:
-                        print("Server responded:", response.status_code, response.text)
-                except Exception as e:
-                    print("Error sending report:", str(e))
-                
+                    try:
+                        requests.post(API_URL, json=payload, timeout=5, verify=False)
+                    except:
+                        pass
+                except:
+                    pass
                 last_state = current_state
                 last_metrics = current_metrics
                 last_disks = current_disks
-            
-        except Exception as e:
-            print("Error:", str(e))
+        except Exception:
+            pass
         time.sleep(900)
+if __name__ == '__main__':
+    main()
+
 
 if __name__ == '__main__':
     main()

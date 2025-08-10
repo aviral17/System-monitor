@@ -1,0 +1,13 @@
+[Unit]
+Description=System Monitor Client
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/system-monitor-client
+Restart=always
+RestartSec=60
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
