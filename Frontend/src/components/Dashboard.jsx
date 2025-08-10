@@ -107,11 +107,22 @@ const Dashboard = () => {
       )
     )
       return;
+
+    setMachines((prev) => prev.filter((m) => m.machine_id !== machine_id));
+
     try {
       await axios.post("/api/commands/kill", { machine_id });
-      alert("Kill command sent");
+
+      try {
+        await axios.post(`/api/machines/${machine_id}/deactivate`);
+      } catch (err) {
+        console.warn("Deactivate request failed:", err?.message || err);
+      }
+
+      alert("Kill command sent (machine hidden).");
     } catch (err) {
-      alert("Failed to send kill command");
+      alert("Failed to send kill command. Reloading list.");
+      fetchData();
     }
   };
 

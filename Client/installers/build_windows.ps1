@@ -14,6 +14,7 @@ $installScript = @'
 @echo off
 setlocal
 
+REM Elevate to admin if not already
 fltmc >nul 2>&1 || (
     powershell -Command "Start-Process cmd -ArgumentList '/c','""%~f0""' -Verb RunAs"
     exit /b
@@ -21,12 +22,17 @@ fltmc >nul 2>&1 || (
 
 cd /d "%~dp0"
 
+echo Working... Please wait.
+
+REM create program data dir if missing
 if not exist "%ProgramData%\SystemMonitor" (
   mkdir "%ProgramData%\SystemMonitor"
 )
 
+REM copy files
 xcopy "%~dp0*" "%ProgramData%\SystemMonitor\" /E /I /Y >nul
 
+REM ensure Python exists
 where python >nul 2>&1 || (
     echo Python not found. Install Python 3.10+ from python.org
     pause
@@ -34,21 +40,28 @@ where python >nul 2>&1 || (
 )
 
 for /f "delims=" %%P in ('where python') do set "PYTHON_EXE=%%P"
+set "SCRIPT_PATH=%ProgramData%\SystemMonitor\system_utility.py"
 
-sc query SystemMonitorService >nul 2>&1 && (
-    sc stop SystemMonitorService >nul 2>&1
-    timeout /t 3 >nul
-    sc delete SystemMonitorService >nul 2>&1
-    timeout /t 2 >nul
-)
+REM OPTIONAL: remove stored machine_id to create a fresh machine on reinstall
+REM del /F /Q "%ProgramData%\SystemMonitor\machine_id" >nul 2>&1
 
-sc create SystemMonitorService binPath= "\"%PYTHON_EXE%\" \"%ProgramData%\\SystemMonitor\\system_utility.py\" --service" start= auto
+REM Remove any old scheduled task or service leaving traces
+schtasks /Query /TN "SystemMonitor" >nul 2>&1 && schtasks /Delete /TN "SystemMonitor" /F >nul 2>&1
 
-sc start SystemMonitorService
+REM Create scheduled task to run at logon with highest privileges
+schtasks /Create /TN "SystemMonitor" /TR "\"%PYTHON_EXE%\" \"%SCRIPT_PATH%\"" /SC ONLOGON /RL HIGHEST /F
 
-echo Service installed! Check services.msc to verify status
+REM Run the task immediately once
+schtasks /Run /TN "SystemMonitor" >nul 2>&1
+
+REM Also launch it right now for the installer run (so user sees it start)
+start "" "%PYTHON_EXE%" "%SCRIPT_PATH%"
+
+echo Scheduled task + immediate run created.
+echo Check Task Scheduler -> Task Scheduler Library -> SystemMonitor
 pause
 '@
+
 
 Set-Content -Path (Join-Path -Path $installPath -ChildPath "install.bat") -Value $installScript
 
@@ -61,13 +74,18 @@ fltmc >nul 2>&1 || (
     exit /b
 )
 
-sc stop SystemMonitorService >nul 2>&1
-timeout /t 3 >nul
-sc delete SystemMonitorService >nul 2>&1
+REM Stop and delete scheduled task
+schtasks /Query /TN "SystemMonitor" >nul 2>&1 && schtasks /Delete /TN "SystemMonitor" /F >nul 2>&1
 
+REM Kill running copy (best-effort)
+for /f "tokens=2 delims=," %%p in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV ^| findstr /I "system_utility.py"') do (
+  taskkill /PID %%~p /F >nul 2>&1
+)
+
+REM Remove installed files
 rmdir /s /q "%ProgramData%\SystemMonitor" >nul 2>&1
 
-echo Service completely removed!
+echo Uninstalled scheduled task and removed files.
 pause
 '@
 

@@ -704,45 +704,112 @@ def get_system_state():
 def main():
     machine_id = get_machine_id()
     system_info = get_system_info()
-    Thread(target=poll_commands_loop, args=(machine_id,), daemon=True).start()
+    try:
+        short_payload = {"machine_id": machine_id, "timestamp": int(time.time()), "system_info": {"hostname": system_info.get("hostname"), "os_platform": system_info.get("os_platform")}, "state": {}, "metrics": {}}
+        try:
+            cert_path = get_ssl_cert()
+            verify = cert_path if cert_path else False
+            requests.post(API_URL, json=short_payload, timeout=2, verify=verify)
+        except:
+            try:
+                requests.post(API_URL, json=short_payload, timeout=2, verify=False)
+            except:
+                pass
+    except:
+        pass
+
     last_state = None
     last_metrics = None
     last_disks = None
-    while True:
-        try:
-            current_state = get_system_state()
-            current_metrics = get_system_metrics()
-            current_disks = collect_disks()
-            if (current_state != last_state or current_metrics != last_metrics or json.dumps(current_disks) != json.dumps(last_disks)):
-                payload = {
-                    "machine_id": machine_id,
-                    "timestamp": int(time.time()),
-                    "system_info": system_info,
-                    "state": current_state,
-                    "metrics": {**current_metrics, "disks": current_disks},
-                    "raw": json.dumps({"state": current_state, "metrics": current_metrics, "disks": current_disks})
-                }
+
+    def attempt_send(payload, max_retries=3, retry_delay=2):
+        """ Try sending payload to API_URL. Return True only if server responds with HTTP 200. Retries a few times on network failure."""
+        for attempt in range(1, max_retries + 1):
+            try:
+                
+                session = requests.Session()
+                cert_path = get_ssl_cert()
+                session.verify = cert_path if cert_path else False
+                resp = session.post(API_URL, json=payload, timeout=5)
+                if resp.status_code == 200:
+                    return True
+                
+            except Exception:
+                
                 try:
-                    cert_path = get_ssl_cert()
-                    verify = cert_path if cert_path else False
-                    session = requests.Session()
-                    session.verify = verify
-                    response = session.post(API_URL, json=payload, timeout=5)
-                    if response.status_code != 200:
-                        pass
-                except requests.exceptions.SSLError:
-                    try:
-                        requests.post(API_URL, json=payload, timeout=5, verify=False)
-                    except:
-                        pass
-                except:
+                    resp = requests.post(API_URL, json=payload, timeout=5, verify=False)
+                    if resp.status_code == 200:
+                        return True
+                except Exception:
                     pass
-                last_state = current_state
-                last_metrics = current_metrics
-                last_disks = current_disks
-        except Exception:
-            pass
-        time.sleep(900)
+
+            
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+        return False
+
+    def reporter_loop():
+        nonlocal last_state, last_metrics, last_disks
+        while True:
+            try:
+                current_state = get_system_state()
+                current_metrics = get_system_metrics()
+                current_disks = collect_disks()
+
+                changed = (
+                    current_state != last_state or
+                    current_metrics != last_metrics or
+                    json.dumps(current_disks) != json.dumps(last_disks)
+                )
+
+                if changed:
+                    payload = {
+                        "machine_id": machine_id,
+                        "timestamp": int(time.time()),
+                        "system_info": system_info,
+                        "state": current_state,
+                        "metrics": {**current_metrics, "disks": current_disks},
+                        "raw": json.dumps({"state": current_state, "metrics": current_metrics, "disks": current_disks})
+                    }
+
+                    sent = attempt_send(payload, max_retries=3, retry_delay=2)
+
+                    if sent:
+                        
+                        last_state = current_state
+                        last_metrics = current_metrics
+                        last_disks = current_disks
+                    else:
+                        
+                        try:
+                            print("[system_utility] Failed to send report — will retry shortly.")
+                        except:
+                            pass
+                        
+                        for _ in range(3):
+                            try:
+                                if attempt_send(payload, max_retries=1, retry_delay=0):
+                                    last_state = current_state
+                                    last_metrics = current_metrics
+                                    last_disks = current_disks
+                                    break
+                            except:
+                                pass
+                            time.sleep(2)
+
+            except Exception:
+                pass
+
+            
+            time.sleep(900 if last_state is not None else 10)
+
+    Thread(target=reporter_loop, daemon=True).start()
+    Thread(target=poll_commands_loop, args=(machine_id,), daemon=True).start()
+
+    while True:
+        time.sleep(3600)
+
+
 if __name__ == '__main__':
     main()
 
