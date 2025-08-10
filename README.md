@@ -34,6 +34,27 @@ npm install
 npm run dev
 
 METHOD A
+
+### INSTALLATION VIA PACKAGES created in respective folders in ROOT Project as Linux_installer, Windows_installer and MacOS_installer ###########
+Windows Installation
+Extract the Windows zip package
+
+--> Right-click install.bat > Run as administrator
+
+
+Linux Installation
+tar -xzf SystemMonitor-1.0.0-linux.tar.gz
+cd SystemMonitor
+sudo ./install.sh
+
+
+macOS Installation
+unzip SystemMonitor-1.0.0-macos.zip
+cd SystemMonitor
+sudo ./install.sh
+
+METHOD B
+
 ### MANUAL INSTALLATION VIA CLIENT FOLDER CODE ###########
 3. Client Agent Installation
 Build and distribute these agents to machines you want to monitor:
@@ -53,24 +74,6 @@ cd client/installers
 chmod +x build_macos.sh
 ./build_macos.sh
 
-METHOD B
-### INSTALLATION VIA PACKAGES created in respective folders in ROOT Project as Linux_installer, Windows_installer and MacOS_installer ###########
-Windows Installation
-Extract the Windows zip package
-
---> Right-click install.bat > Run as administrator
-
-
-Linux Installation
-tar -xzf SystemMonitor-1.0.0-linux.tar.gz
-cd SystemMonitor
-sudo ./install.sh
-
-
-macOS Installation
-unzip SystemMonitor-1.0.0-macos.zip
-cd SystemMonitor
-sudo ./install.sh
 
 ##################################################
 
