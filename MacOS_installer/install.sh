@@ -1,25 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="SystemMonitor"
-VERSION="1.0.0"
-OUTPUT_DIR="dist"
-INSTALL_DIR="$APP_NAME"
-
-# Skip permission errors and proceed
-sudo rm -rf "$OUTPUT_DIR/$INSTALL_DIR" 2>/dev/null || true
-mkdir -p "$OUTPUT_DIR/$INSTALL_DIR" 2>/dev/null || sudo mkdir -p "$OUTPUT_DIR/$INSTALL_DIR"
-
-# Copy the python script (ignore errors)
-cp -f ../system_utility.py "$OUTPUT_DIR/$INSTALL_DIR/" 2>/dev/null || \
-cp -f ./system_utility.py "$OUTPUT_DIR/$INSTALL_DIR/" 2>/dev/null || \
-echo "Warning: system_utility.py might be missing in package" >&2
-
-# Create installer script (critical part)
-cat > "$OUTPUT_DIR/$INSTALL_DIR/install.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-
 INSTALL_DIR="/Library/SystemMonitor"
 SCRIPT_NAME="system_utility.py"
 PLIST_PATH="/Library/LaunchDaemons/com.systemmonitor.agent.plist"
@@ -79,38 +60,3 @@ launchctl load -w "$PLIST_PATH" 2>/dev/null || true
 
 echo "Success! Service installed and running"
 echo "Logs: /var/log/systemmonitor.{out,err}.log"
-SH
-chmod +x "$OUTPUT_DIR/$INSTALL_DIR/install.sh"
-
-# Create uninstaller
-cat > "$OUTPUT_DIR/$INSTALL_DIR/uninstall.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-
-PLIST_PATH="/Library/LaunchDaemons/com.systemmonitor.agent.plist"
-INSTALL_DIR="/Library/SystemMonitor"
-
-# Auto-elevate with sudo
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Requesting administrator privileges..."
-    exec sudo -p "Password for uninstall: " "$0" "$@"
-fi
-
-echo "Stopping service..."
-launchctl bootout system "$PLIST_PATH" 2>/dev/null || \
-launchctl unload -w "$PLIST_PATH" 2>/dev/null || true
-
-echo "Removing files..."
-rm -f "$PLIST_PATH" 2>/dev/null || true
-rm -rf "$INSTALL_DIR" 2>/dev/null || true
-
-echo "SystemMonitor completely uninstalled"
-SH
-chmod +x "$OUTPUT_DIR/$INSTALL_DIR/uninstall.sh"
-
-# Create zip package (ignore errors)
-(cd "$OUTPUT_DIR" && zip -r "${APP_NAME}-${VERSION}-macos.zip" "$INSTALL_DIR" >/dev/null 2>&1 || true)
-
-# Final message even if zip failed
-echo "Built: $OUTPUT_DIR/${APP_NAME}-${VERSION}-macos.zip"
-echo "Note: Package might be incomplete if you see permission errors above"
