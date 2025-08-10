@@ -4,7 +4,7 @@ A real-time system monitoring dashboard with backend API, frontend UI, and cross
 
 ## Project Structure
 project/
-├── Backend/ # Flask server (Python 3.12+)
+├── Backend/ # Flask server (Python 3.12)
 ├── Frontend/ # React application
 └── client/
 └── installers/ # Agent installers for all platforms
@@ -13,7 +13,7 @@ project/
 ## Prerequisites
 
 - **Python 3.12** (64-bit)
-- **Node.js** (v22.18.0+)
+- **Node.js** (v22.18.0)
 - **Pip** (Python package manager)
 - **npm** (Node package manager)
 
@@ -22,7 +22,7 @@ project/
 
 
 ```bash
-### 1. Backend Setup
+1. Backend Setup
 
 cd Backend
 pip install -r requirements.txt
