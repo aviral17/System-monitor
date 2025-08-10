@@ -98,14 +98,17 @@ const Dashboard = () => {
   };
 
   const handleKill = async (machine_id) => {
-    const pid = window.prompt(
-      `Enter PID to kill on ${machine_id.substring(0, 8)}:`
-    );
-    if (!pid) return;
-    if (!window.confirm(`Kill PID ${pid} on ${machine_id.substring(0, 8)}?`))
+    if (
+      !confirm(
+        `Are you sure you want to kill python processes on ${machine_id.substring(
+          0,
+          8
+        )}?`
+      )
+    )
       return;
     try {
-      await axios.post("/api/commands/kill", { machine_id, pid });
+      await axios.post("/api/commands/kill", { machine_id });
       alert("Kill command sent");
     } catch (err) {
       alert("Failed to send kill command");

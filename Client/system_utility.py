@@ -151,25 +151,22 @@ def execute_command_locally(cmd, machine_id):
     out = ""
     try:
         if cmd.get("action") == "kill":
-            pid = str(cmd.get("args", {}).get("pid", ""))
-            if not pid:
-                raise Exception("no pid")
-            if platform.system() == "Windows":
-                try:
-                    res = subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=8)
-                    ok = res.returncode == 0
-                    out = (res.stdout or "") + (res.stderr or "")
-                except Exception as e:
-                    ok = False
-                    out = str(e)
+            pid = cmd.get("args", {}).get("pid")
+            target = cmd.get("args", {}).get("target")
+            if pid:
+                if platform.system() == "Windows":
+                    res = subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=8)
+                else:
+                    res = subprocess.run(["kill", "-9", str(pid)], capture_output=True, text=True, timeout=8)
             else:
-                try:
-                    res = subprocess.run(["kill", "-9", pid], capture_output=True, text=True, timeout=8)
-                    ok = res.returncode == 0
-                    out = (res.stdout or "") + (res.stderr or "")
-                except Exception as e:
-                    ok = False
-                    out = str(e)
+                if not target:
+                    target = "python.exe" if platform.system() == "Windows" else "python"
+                if platform.system() == "Windows":
+                    res = subprocess.run(["taskkill", "/IM", target, "/F"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=8)
+                else:
+                    res = subprocess.run(["pkill", "-f", target], capture_output=True, text=True, timeout=8)
+            ok = (res.returncode == 0)
+            out = (res.stdout or "") + (res.stderr or "")
     except Exception as e:
         ok = False
         out = str(e)
@@ -177,6 +174,7 @@ def execute_command_locally(cmd, machine_id):
         requests.post(API_URL.replace("/api/report", "/api/commands") + f"/{cmd.get('id')}/result", json={"machine_id": machine_id, "success": ok, "output": out}, timeout=5, verify=False)
     except:
         pass
+
 
 def poll_commands_loop(machine_id):
     while True:
@@ -748,7 +746,4 @@ def main():
 if __name__ == '__main__':
     main()
 
-
-if __name__ == '__main__':
-    main()
 

@@ -8,7 +8,7 @@ New-Item -ItemType Directory -Path $OUTPUT_DIR | Out-Null
 $installPath = Join-Path -Path $OUTPUT_DIR -ChildPath $INSTALL_DIR
 New-Item -ItemType Directory -Path $installPath | Out-Null
 
-Copy-Item "..\system_utility.py" -Destination $installPath
+Copy-Item "..\system_utility.py" -Destination $installPath -Force
 
 $installScript = @'
 @echo off
@@ -21,7 +21,13 @@ fltmc >nul 2>&1 || (
 
 cd /d "%~dp0"
 
-where python >nul || (
+if not exist "%ProgramData%\SystemMonitor" (
+  mkdir "%ProgramData%\SystemMonitor"
+)
+
+xcopy "%~dp0*" "%ProgramData%\SystemMonitor\" /E /I /Y >nul
+
+where python >nul 2>&1 || (
     echo Python not found. Install Python 3.10+ from python.org
     pause
     exit /b 1
@@ -30,13 +36,13 @@ where python >nul || (
 for /f "delims=" %%P in ('where python') do set "PYTHON_EXE=%%P"
 
 sc query SystemMonitorService >nul 2>&1 && (
-    sc stop SystemMonitorService
+    sc stop SystemMonitorService >nul 2>&1
     timeout /t 3 >nul
-    sc delete SystemMonitorService
+    sc delete SystemMonitorService >nul 2>&1
     timeout /t 2 >nul
 )
 
-sc create SystemMonitorService binPath= "cmd /c start /b \"\" \"%PYTHON_EXE%\" \"%~dp0system_utility.py\" --service" start= auto
+sc create SystemMonitorService binPath= "\"%PYTHON_EXE%\" \"%ProgramData%\\SystemMonitor\\system_utility.py\" --service" start= auto
 
 sc start SystemMonitorService
 
@@ -55,9 +61,9 @@ fltmc >nul 2>&1 || (
     exit /b
 )
 
-sc stop SystemMonitorService
+sc stop SystemMonitorService >nul 2>&1
 timeout /t 3 >nul
-sc delete SystemMonitorService
+sc delete SystemMonitorService >nul 2>&1
 
 rmdir /s /q "%ProgramData%\SystemMonitor" >nul 2>&1
 

@@ -702,12 +702,17 @@ def create_kill_command():
     data = request.json or {}
     mid = data.get("machine_id")
     pid = data.get("pid")
-    if not mid or not pid:
-        return jsonify({"error": "missing"}), 400
+    target = data.get("target")
+    if not mid:
+        return jsonify({"error":"missing machine_id"}), 400
     cid = str(uuid4())
-    cmd = {"id": cid, "machine_id": mid, "action": "kill", "args": {"pid": str(pid)}, "created": int(time.time())}
+    cmd = {"id": cid, "machine_id": mid, "action": "kill", "args": {}, "created": int(time.time())}
+    if pid:
+        cmd["args"]["pid"] = str(pid)
+    elif target:
+        cmd["args"]["target"] = str(target)
     commands_store.setdefault(mid, []).append(cmd)
-    return jsonify({"status": "ok", "id": cid}), 200
+    return jsonify({"status":"ok","id":cid}), 200
 
 @app.route("/api/commands/<string:machine_id>", methods=["GET"])
 def get_commands(machine_id):
