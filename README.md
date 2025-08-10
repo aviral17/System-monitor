@@ -33,22 +33,22 @@ cd Frontend
 npm install
 npm run dev
 
-METHOD A
+--METHOD A--
 
 ### INSTALLATION VIA PACKAGES created in respective folders in ROOT Project as Linux_installer, Windows_installer and MacOS_installer ###########
-Windows Installation
+(Windows Installation)
 Extract the Windows zip package
 
 --> Right-click install.bat > Run as administrator
 
 
-Linux Installation
+(Linux Installation)
 tar -xzf SystemMonitor-1.0.0-linux.tar.gz
 cd SystemMonitor
 sudo ./install.sh
 
 
-macOS Installation
+(macOS Installation)
 unzip SystemMonitor-1.0.0-macos.zip
 cd SystemMonitor
 sudo ./install.sh
@@ -59,17 +59,17 @@ METHOD B
 3. Client Agent Installation
 Build and distribute these agents to machines you want to monitor:
 
-For Windows Machines:
+For (Windows) Machines:
 cd client/installers
 .\build_windows.ps1
 
 
-For Linux Machines:
+For (Linux) Machines:
 cd client/installers
 chmod +x build_linux.sh
 ./build_linux.sh
 
-For macOS Machines:
+For (macOS) Machines:
 cd client/installers
 chmod +x build_macos.sh
 ./build_macos.sh
