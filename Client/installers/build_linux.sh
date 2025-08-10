@@ -1,63 +1,114 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-APP_NAME="system-monitor"
+APP_NAME="SystemMonitor"
 VERSION="1.0.0"
-INSTALL_DIR="/usr/local/bin"
-SERVICE_DIR="/etc/systemd/system"
+OUTPUT_DIR="dist"
+INSTALL_DIR="$APP_NAME"
 
-TEMP_DIR=$(mktemp -d)
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR/$INSTALL_DIR"
 
-mkdir -p "$TEMP_DIR/DEBIAN"
-mkdir -p "$TEMP_DIR$INSTALL_DIR"
-mkdir -p "$TEMP_DIR$SERVICE_DIR"
+# copy the python script
+cp -f ../system_utility.py "$OUTPUT_DIR/$INSTALL_DIR/" || cp -f ./system_utility.py "$OUTPUT_DIR/$INSTALL_DIR/"
 
-cp "../system_utility.py" "$TEMP_DIR$INSTALL_DIR/$APP_NAME"
-chmod +x "$TEMP_DIR$INSTALL_DIR/$APP_NAME"
+# installer that will run ON THE TARGET (requires sudo)
+cat > "$OUTPUT_DIR/$INSTALL_DIR/install.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
 
-cat > "$TEMP_DIR$SERVICE_DIR/$APP_NAME.service" <<EOF
+# Target install script (run as root)
+INSTALL_DIR="/opt/SystemMonitor"
+SCRIPT_NAME="system_utility.py"
+SERVICE_NAME="systemmonitor"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Please run as root: sudo ./install.sh"
+  exit 1
+fi
+
+echo "Installing SystemMonitor to $INSTALL_DIR ..."
+
+mkdir -p "$INSTALL_DIR"
+cp -f "./$SCRIPT_NAME" "$INSTALL_DIR/$SCRIPT_NAME"
+chmod 755 "$INSTALL_DIR/$SCRIPT_NAME"
+
+# Find python3 executable
+PYTHON_BIN="$(command -v python3 || true)"
+if [ -z "$PYTHON_BIN" ]; then
+  PYTHON_BIN="$(command -v python || true)"
+fi
+if [ -z "$PYTHON_BIN" ]; then
+  echo "Python not found. Please install python3."
+  exit 1
+fi
+
+# Optional: remove saved machine_id so that re-install creates a new machine entry
+# Uncomment below if you want a fresh machine id on reinstall
+# rm -f /var/lib/SystemMonitor/machine_id
+# rm -f /opt/SystemMonitor/machine_id
+
+# write systemd unit
+cat > "$SERVICE_FILE" <<UNIT
 [Unit]
-Description=System Monitor
+Description=SystemMonitor background reporter
 After=network.target
 
 [Service]
-ExecStart=$INSTALL_DIR/$APP_NAME
-Restart=always
-RestartSec=60
+Type=simple
+ExecStart=$PYTHON_BIN $INSTALL_DIR/$SCRIPT_NAME
+WorkingDirectory=$INSTALL_DIR
+Restart=on-failure
+RestartSec=5
 User=root
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOF
+UNIT
 
-cat > "$TEMP_DIR/DEBIAN/control" <<EOF
-Package: $APP_NAME
-Version: $VERSION
-Section: base
-Priority: optional
-Architecture: all
-Maintainer: Support <support@example.com>
-Description: System monitoring utility
-Depends: python3, python3-psutil, python3-requests
-EOF
-
-cat > "$TEMP_DIR/DEBIAN/postinst" <<EOF
-#!/bin/bash
+# reload and enable/start
 systemctl daemon-reload
-systemctl enable $APP_NAME.service
-systemctl start $APP_NAME.service
-echo "Service started! Check status with: systemctl status $APP_NAME"
-EOF
-chmod +x "$TEMP_DIR/DEBIAN/postinst"
+systemctl enable --now "$SERVICE_NAME"
 
-cat > "$TEMP_DIR/DEBIAN/prerm" <<EOF
-#!/bin/bash
-systemctl stop $APP_NAME.service
-systemctl disable $APP_NAME.service
-EOF
-chmod +x "$TEMP_DIR/DEBIAN/prerm"
+echo "Service $SERVICE_NAME installed and started."
+echo "Use: systemctl status $SERVICE_NAME"
+echo "Logs: journalctl -u $SERVICE_NAME -f"
+SH
 
-dpkg-deb --build "$TEMP_DIR" "${APP_NAME}_${VERSION}.deb"
-rm -rf "$TEMP_DIR"
-echo "Package built: ${APP_NAME}_${VERSION}.deb"
-echo "Install with: sudo dpkg -i ${APP_NAME}_${VERSION}.deb"
+chmod +x "$OUTPUT_DIR/$INSTALL_DIR/install.sh"
+
+# uninstall script for target
+cat > "$OUTPUT_DIR/$INSTALL_DIR/uninstall.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE_NAME="systemmonitor"
+INSTALL_DIR="/opt/SystemMonitor"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Please run as root: sudo ./uninstall.sh"
+  exit 1
+fi
+
+echo "Stopping and removing service..."
+systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+systemctl daemon-reload
+rm -f "$SERVICE_FILE"
+
+echo "Removing installation directory..."
+rm -rf "$INSTALL_DIR"
+
+echo "Uninstalled."
+SH
+
+chmod +x "$OUTPUT_DIR/$INSTALL_DIR/uninstall.sh"
+
+# pack
+tar -C "$OUTPUT_DIR" -czf "$OUTPUT_DIR/${APP_NAME}-${VERSION}-linux.tar.gz" "$INSTALL_DIR"
+
+echo "Built: $OUTPUT_DIR/${APP_NAME}-${VERSION}-linux.tar.gz"
