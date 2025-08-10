@@ -1,7 +1,5 @@
 # System Monitor Dashboard
 
-![System Monitor Dashboard](https://via.placeholder.com/800x400?text=System+Monitor+Screenshot)
-
 A real-time system monitoring dashboard with backend API, frontend UI, and cross-platform client agents.
 
 ## Project Structure
@@ -15,15 +13,17 @@ project/
 ## Prerequisites
 
 - **Python 3.12** (64-bit)
-- **Node.js** (v16+)
+- **Node.js** (v22.18.0+)
 - **Pip** (Python package manager)
 - **npm** (Node package manager)
 
 ## Setup Instructions
 
-### 1. Backend Setup
+
 
 ```bash
+### 1. Backend Setup
+
 cd Backend
 pip install -r requirements.txt
 uvicorn main:python app.py```
